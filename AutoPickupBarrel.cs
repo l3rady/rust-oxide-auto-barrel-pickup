@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("AutoPickupBarrel", "l3rady", "1.0.0")]
+    [Info("AutoPickupBarrel", "l3rady", "1.1.0")]
     [Description("Allows players to automatically pickup dropped loot from barrels on destroy. Aditional permissions for road sign auto pickup, one hit destroy and disabling gibs on destroy.")]
 
     public class AutoPickupBarrel : RustPlugin
@@ -124,9 +124,9 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            // Check barrel/roadsign is in range
+            // Check barrel/roadsign is in range unless configured range is 0
             var lootContainerDistance = Vector2.Distance(player.transform.position, lootContainer.transform.position);
-            if (lootContainerDistance > config.AutoPickupDistance)
+            if (config.AutoPickupDistance > 0 && lootContainerDistance > config.AutoPickupDistance)
             {
                 return null;
             }
