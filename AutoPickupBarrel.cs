@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     [Info("AutoPickupBarrel", "l3rady", "1.1.0")]
-    [Description("Allows players to automatically pickup dropped loot from barrels on destroy. Aditional permissions for road sign auto pickup, one hit destroy and disabling gibs on destroy.")]
+    [Description("Allows players to pick up dropped loot from barrels and road signs on destroy automatically.")]
 
     public class AutoPickupBarrel : RustPlugin
     {
