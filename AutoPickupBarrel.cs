@@ -7,17 +7,17 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("AutoPickupBarrel", "l3rady", "1.1.0")]
+    [Info("Auto Pickup Barrel", "l3rady", "1.1.1")]
     [Description("Allows players to pick up dropped loot from barrels and road signs on destroy automatically.")]
 
     public class AutoPickupBarrel : RustPlugin
     {
-        private readonly string[] barrelContainerShortPrefabNames = { "loot_barrel_1", "loot_barrel_2", "loot-barrel-1", "loot-barrel-2", "oil_barrel" };
-        private readonly string[] roadSignContainerShortPrefabNames = { "roadsign1", "roadsign2", "roadsign3", "roadsign4", "roadsign5", "roadsign6", "roadsign7", "roadsign8", "roadsign9" };
+        private readonly string[] BarrelContainerShortPrefabNames = { "loot_barrel_1", "loot_barrel_2", "loot-barrel-1", "loot-barrel-2", "oil_barrel" };
+        private readonly string[] RoadSignContainerShortPrefabNames = { "roadsign1", "roadsign2", "roadsign3", "roadsign4", "roadsign5", "roadsign6", "roadsign7", "roadsign8", "roadsign9" };
 
         #region Configuration
 
-        private Configuration config;
+        private Configuration Settings;
 
         public class Configuration
         {
@@ -29,20 +29,20 @@ namespace Oxide.Plugins
             public Dictionary<string, object> ToDictionary() => JsonConvert.DeserializeObject<Dictionary<string, object>>(ToJson());
         }
 
-        protected override void LoadDefaultConfig() => config = new Configuration();
+        protected override void LoadDefaultConfig() => Settings = new Configuration();
 
         protected override void LoadConfig()
         {
             base.LoadConfig();
             try
             {
-                config = Config.ReadObject<Configuration>();
-                if (config == null)
+                Settings = Config.ReadObject<Configuration>();
+                if (Settings == null)
                 {
                     throw new JsonException();
                 }
 
-                if (!config.ToDictionary().Keys.SequenceEqual(Config.ToDictionary(x => x.Key, x => x.Value).Keys))
+                if (!Settings.ToDictionary().Keys.SequenceEqual(Config.ToDictionary(x => x.Key, x => x.Value).Keys))
                 {
                     PrintWarning("Configuration appears to be outdated; updating and saving");
                     SaveConfig();
@@ -58,7 +58,7 @@ namespace Oxide.Plugins
         protected override void SaveConfig()
         {
             PrintWarning($"Configuration changes saved to {Name}.json");
-            Config.WriteObject(config, true);
+            Config.WriteObject(Settings, true);
         }
 
         #endregion Configuration
@@ -73,68 +73,68 @@ namespace Oxide.Plugins
             permission.RegisterPermission("AutoPickupBarrel.RoadSign.InstaKill", this);
         }
 
-        private object OnEntityTakeDamage(LootContainer lootContainer, HitInfo hitInfo)
+        private object OnEntityTakeDamage(LootContainer LootEntContainer, HitInfo HitEntInfo)
         {
             // Check we have something to work with
-            if (lootContainer == null
-                || hitInfo == null
+            if (LootEntContainer == null
+                || HitEntInfo == null
             ){
                 return null;
             }
 
             // Check we are targetting barrels/roadsigns
-            var lootContainerName = lootContainer.ShortPrefabName;
-            if (lootContainerName == null){
+            var LootEntContainerName = LootEntContainer.ShortPrefabName;
+            if (LootEntContainerName == null){
                 return null;
             }
 
-            var autoPickupPrefab = "";
-            if(isBarrel(lootContainerName)) {
-                autoPickupPrefab = "Barrel";
-            } else if(isRoadSign(lootContainerName)) {
-                autoPickupPrefab = "RoadSign";
+            var AutoPickupPrefab = "";
+            if(IsBarrel(LootEntContainerName)) {
+                AutoPickupPrefab = "Barrel";
+            } else if(IsRoadSign(LootEntContainerName)) {
+                AutoPickupPrefab = "RoadSign";
             } else {
                 return null;
             }
 
-            return autoPickup(lootContainer, hitInfo, autoPickupPrefab);
+            return AutoPickup(LootEntContainer, HitEntInfo, AutoPickupPrefab);
         }
 
-        private bool isBarrel(string lootContainerName) {
-            return barrelContainerShortPrefabNames.Contains(lootContainerName);
+        private bool IsBarrel(string LootEntContainerName) {
+            return BarrelContainerShortPrefabNames.Contains(LootEntContainerName);
         }
 
-        private bool isRoadSign(string lootContainerName) {
-            return roadSignContainerShortPrefabNames.Contains(lootContainerName);
+        private bool IsRoadSign(string LootEntContainerName) {
+            return RoadSignContainerShortPrefabNames.Contains(LootEntContainerName);
         }
 
-        private object autoPickup(LootContainer lootContainer, HitInfo hitInfo, string autoPickupPrefab) {
+        private object AutoPickup(LootContainer LootEntContainer, HitInfo HitEntInfo, string AutoPickupPrefab) {
             // Check player has permission
-            var player = lootContainer.lastAttacker as BasePlayer ?? hitInfo.InitiatorPlayer;
+            var player = LootEntContainer.lastAttacker as BasePlayer ?? HitEntInfo.InitiatorPlayer;
             if (player == null
-                || !permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{autoPickupPrefab}.On"))
+                || !permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.On"))
             {
                 return null;
             }
 
             // Check there is loot in the container
-            var lootContainerInventory = lootContainer?.inventory;
+            var lootContainerInventory = LootEntContainer?.inventory;
             if (lootContainerInventory == null)
             {
                 return null;
             }
 
             // Check barrel/roadsign is in range unless configured range is 0
-            var lootContainerDistance = Vector2.Distance(player.transform.position, lootContainer.transform.position);
-            if (config.AutoPickupDistance > 0 && lootContainerDistance > config.AutoPickupDistance)
+            var lootContainerDistance = Vector2.Distance(player.transform.position, LootEntContainer.transform.position);
+            if (Settings.AutoPickupDistance > 0 && lootContainerDistance > Settings.AutoPickupDistance)
             {
                 return null;
             }
 
 
             // Check if InstaKill allowed or enough damage has been done to kill
-            var lootContainerRemainingHealth = lootContainer.Health() - hitInfo.damageTypes.Total();
-            if (!permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{autoPickupPrefab}.InstaKill")
+            var lootContainerRemainingHealth = LootEntContainer.Health() - HitEntInfo.damageTypes.Total();
+            if (!permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.InstaKill")
                 && lootContainerRemainingHealth > 0)
             {
                 return null;
@@ -152,12 +152,12 @@ namespace Oxide.Plugins
                 NextTick(() =>
                 {
                     // Kill the barrel/roadsign with or without gibs depending on permission
-                    if (permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{autoPickupPrefab}.NoGibs"))
+                    if (permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.NoGibs"))
                     {
-                        lootContainer?.Kill();
+                        LootEntContainer?.Kill();
 
                     } else {
-                        lootContainer?.Kill(BaseNetworkable.DestroyMode.Gib);
+                        LootEntContainer?.Kill(BaseNetworkable.DestroyMode.Gib);
 
                     }
                 });
