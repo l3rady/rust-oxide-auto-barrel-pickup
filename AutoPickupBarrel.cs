@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Auto Pickup Barrel", "l3rady", "1.1.1")]
+    [Info("Auto Pickup Barrel", "l3rady", "1.2")]
     [Description("Allows players to pick up dropped loot from barrels and road signs on destroy automatically.")]
 
     public class AutoPickupBarrel : RustPlugin
@@ -108,62 +108,127 @@ namespace Oxide.Plugins
             return RoadSignContainerShortPrefabNames.Contains(LootEntContainerName);
         }
 
-        private object AutoPickup(LootContainer LootEntContainer, HitInfo HitEntInfo, string AutoPickupPrefab) {
-            // Check player has permission
-            var player = LootEntContainer.lastAttacker as BasePlayer ?? HitEntInfo.InitiatorPlayer;
-            if (player == null
-                || !permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.On"))
+        private object AutoPickup(LootContainer lootContainer, HitInfo hitInfo, string autoPickupPrefab)
+        {
+            var player = lootContainer.lastAttacker as BasePlayer ?? hitInfo.InitiatorPlayer;
+            if (player == null || !HasAutoPickupPermission(player, autoPickupPrefab))
             {
                 return null;
             }
 
-            // Check there is loot in the container
-            var lootContainerInventory = LootEntContainer?.inventory;
+            var lootContainerInventory = lootContainer?.inventory;
             if (lootContainerInventory == null)
             {
                 return null;
             }
 
-            // Check barrel/roadsign is in range unless configured range is 0
-            var lootContainerDistance = Vector2.Distance(player.transform.position, LootEntContainer.transform.position);
-            if (Settings.AutoPickupDistance > 0 && lootContainerDistance > Settings.AutoPickupDistance)
+            if (!IsWithinAutoPickupRange(player, lootContainer))
             {
                 return null;
             }
 
-
-            // Check if InstaKill allowed or enough damage has been done to kill
-            var lootContainerRemainingHealth = LootEntContainer.Health() - HitEntInfo.damageTypes.Total();
-            if (!permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.InstaKill")
-                && lootContainerRemainingHealth > 0)
+            if (!CanAutoPickup(lootContainer, player, autoPickupPrefab))
             {
                 return null;
             }
 
-            // Give player the loot from the barrel/roadsign
-            for (int i = lootContainerInventory.itemList.Count - 1; i >= 0; i--)
+            ApplyScrapMultiplier(lootContainerInventory, GetPlayerScrapMultiplier(player));
+            GiveItemsToPlayer(player, lootContainerInventory);
+
+            if (IsLootContainerEmpty(lootContainerInventory))
             {
-                player.GiveItem(lootContainerInventory.itemList[i], BaseEntity.GiveItemReason.PickedUp);
-            }
-
-            // Check the barrel/roadsign is empty
-            if (lootContainerInventory.itemList == null || lootContainerInventory.itemList.Count <= 0)
-            {
-                NextTick(() =>
-                {
-                    // Kill the barrel/roadsign with or without gibs depending on permission
-                    if (permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.NoGibs"))
-                    {
-                        LootEntContainer?.Kill();
-
-                    } else {
-                        LootEntContainer?.Kill(BaseNetworkable.DestroyMode.Gib);
-
-                    }
-                });
+                HandleEmptyLootContainer(lootContainer, player, autoPickupPrefab);
             }
 
             return false;
+        }
+
+        private float? GetPlayerScrapMultiplier(BasePlayer player)
+        {
+            var playerModifiers = player.modifiers.All;
+
+            if (playerModifiers != null)
+            {
+                var scrapModifier = playerModifiers
+                    .OfType<Modifier>()
+                    .FirstOrDefault(modifier => (int)modifier.GetType().GetProperty("Type").GetValue(modifier) == 5);
+
+                if (scrapModifier != null)
+                {
+                    return (float)scrapModifier.Value;
+                }
+            }
+
+            return null;
+        }
+
+        private bool HasAutoPickupPermission(BasePlayer player, string autoPickupPrefab)
+        {
+            return permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{autoPickupPrefab}.On");
+        }
+
+        private bool IsWithinAutoPickupRange(BasePlayer player, LootContainer lootContainer)
+        {
+            if (Settings.AutoPickupDistance <= 0)
+            {
+                return true;
+            }
+
+            var distance = Vector2.Distance(player.transform.position, lootContainer.transform.position);
+            return distance <= Settings.AutoPickupDistance;
+        }
+
+        private bool CanAutoPickup(LootContainer lootContainer, BasePlayer player, string autoPickupPrefab)
+        {
+            var remainingHealth = lootContainer.Health() - lootContainer.lastHit.damageTypes.Total();
+            return permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{autoPickupPrefab}.InstaKill") || remainingHealth <= 0;
+        }
+
+        private void ApplyScrapMultiplier(ItemContainer container, float? scrapMultiplier)
+        {
+            if (scrapMultiplier != null)
+            {
+                foreach (var item in container.itemList)
+                {
+                    if (item.info.shortname == "scrap")
+                    {
+                        item.amount += (int)Math.Round(scrapMultiplier.Value * item.amount);
+                    }
+                }
+            }
+        }
+
+        private void GiveItemsToPlayer(BasePlayer player, ItemContainer container)
+        {
+            foreach (var item in container.itemList)
+            {
+                player.GiveItem(item, BaseEntity.GiveItemReason.PickedUp);
+            }
+        }
+
+        private bool IsLootContainerEmpty(ItemContainer container)
+        {
+            return container.itemList == null || container.itemList.Count <= 0;
+        }
+
+        private void HandleEmptyLootContainer(LootContainer lootContainer, BasePlayer player, string autoPickupPrefab)
+        {
+            NextTick(() =>
+            {
+                if (HasNoGibsPermission(player, autoPickupPrefab))
+                {
+                    lootContainer?.Kill();
+                }
+                else
+                {
+                    lootContainer?.Kill(BaseNetworkable.DestroyMode.Gib);
+                }
+            });
+        }
+
+        private bool HasNoGibsPermission(BasePlayer player, string autoPickupPrefab)
+        {
+            return permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{autoPickupPrefab}.NoGibs");
         }
     }
 }
