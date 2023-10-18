@@ -4,10 +4,11 @@ using System.Linq;
 using Newtonsoft.Json;
 using Rust;
 using UnityEngine;
+using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("Auto Pickup Barrel", "l3rady", "1.2.1")]
+    [Info("Auto Pickup Barrel", "l3rady", "1.3")]
     [Description("Allows players to pick up dropped loot from barrels and road signs on destroy automatically.")]
 
     public class AutoPickupBarrel : RustPlugin
@@ -108,25 +109,6 @@ namespace Oxide.Plugins
             return RoadSignContainerShortPrefabNames.Contains(LootEntContainerName);
         }
 
-        private decimal? GetPlayerScrapMultiplier(BasePlayer player)
-        {
-            var playerModifiers = player.modifiers.All;
-
-            if (playerModifiers != null)
-            {
-                var scrapModifier = playerModifiers
-                    .OfType<Modifier>()
-                    .FirstOrDefault(modifier => (int)modifier.GetType().GetProperty("Type").GetValue(modifier) == 5);
-
-                if (scrapModifier != null)
-                {
-                    return (decimal)scrapModifier.Value;
-                }
-            }
-
-            return null;
-        }
-
         private object AutoPickup(LootContainer LootEntContainer, HitInfo HitEntInfo, string AutoPickupPrefab) {
             // Check player has permission
             var player = LootEntContainer.lastAttacker as BasePlayer ?? HitEntInfo.InitiatorPlayer;
@@ -159,14 +141,35 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            var ScrapMultiplier = GetPlayerScrapMultiplier(player);
             // Give player the loot from the barrel/roadsign
             for (int i = lootContainerInventory.itemList.Count - 1; i >= 0; i--)
             {
-                if(ScrapMultiplier != null && lootContainerInventory.itemList[i].info.shortname == "scrap")
+
+                // If item is scrap, apply the tea bonus drop logic used by the game to award extra scrap.
+                if(lootContainerInventory.itemList[i].info.shortname == "scrap")
                 {
-                    lootContainerInventory.itemList[i].amount += (int)Math.Round((decimal)ScrapMultiplier * lootContainerInventory.itemList[i].amount);
+                    float num = (player.modifiers != null) ? (1f + player.modifiers.GetValue(global::Modifier.ModifierType.Scrap_Yield, 0f)) : 0f;
+                    if (num > 1f)
+                    {
+                        float num2 = player.modifiers.GetVariableValue(global::Modifier.ModifierType.Scrap_Yield, 0f);
+                        float num3 = Mathf.Max((float)lootContainerInventory.itemList[i].amount * num - (float)lootContainerInventory.itemList[i].amount, 0f);
+
+                        num2 += num3;
+                        int num4 = 0;
+                        if (num2 >= 1f)
+                        {
+                            num4 = (int)num2;
+                            num2 -= (float)num4;
+                        }
+                        player.modifiers.SetVariableValue(global::Modifier.ModifierType.Scrap_Yield, num2);
+                        if (num4 > 0)
+                        {
+                            lootContainerInventory.itemList[i].amount += num4;
+                        }
+                    }
                 }
+
+                // Place item in player inventory
                 player.GiveItem(lootContainerInventory.itemList[i], BaseEntity.GiveItemReason.PickedUp);
             }
 
@@ -175,6 +178,9 @@ namespace Oxide.Plugins
             {
                 NextTick(() =>
                 {
+                    // Call the OnEntityDeath call back as some plugins hook this to award bonus for breaking barrels.
+                    Interface.CallHook("OnEntityDeath", LootEntContainer, HitEntInfo);
+
                     // Kill the barrel/roadsign with or without gibs depending on permission
                     if (permission.UserHasPermission(player.UserIDString, $"AutoPickupBarrel.{AutoPickupPrefab}.NoGibs"))
                     {
