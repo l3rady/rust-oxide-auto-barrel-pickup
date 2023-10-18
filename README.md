@@ -11,6 +11,9 @@ A QOL plugin for players that auto picks up a barrel or road sign's loot on dest
 
 
 ## Changelog
+### v1.3
+* Better handling of bonus scrap awarding when s player has a scrap tea buff. Inspiration taken from how the games does it. Now advanced teas award the correct amount of scrap of 6 or 7 for each barrel.
+* Added a call to OnEntityDeath hook just before killing the barrel. This allows plugins like BarrelPoints and RustRewards to see a player breaking a barrel and awarding their bonuses.
 ### v1.2
 * Implemented a scrap multiplier to barrel payout if the user is using a scrap tea. Because we empty the barrel before destroying, the games built in mechanic for awarding extra scrap doesn't work.
 
